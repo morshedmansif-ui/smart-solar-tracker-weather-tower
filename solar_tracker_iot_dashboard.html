@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Solar Tracker Telemetry</title>
+    <!-- Chart.js & Paho MQTT CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-amber: #f59e0b;
+            --accent-blue: #3b82f6;
+            --border-color: #334155;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            padding: 24px;
+            min-height: 100vh;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .title-group h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .title-group p {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #0f172a;
+            padding: 8px 16px;
+            border-radius: 9999px;
+            border: 1px solid var(--border-color);
+            font-size: 0.875rem;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: var(--accent-amber);
+        }
+
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            margin-bottom: 12px;
+        }
+
+        .card-value {
+            font-size: 2.25rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .progress-bar-bg {
+            background-color: #0f172a;
+            height: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s ease, background-color 0.3s ease;
+        }
+
+        .fan-status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .fan-off {
+            background-color: rgba(239, 68, 68, 0.1);
+            color: var(--accent-red);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .fan-on {
+            background-color: rgba(16, 185, 129, 0.1);
+            color: var(--accent-green);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .fan-icon {
+            display: inline-block;
+            transition: transform 0.5s linear;
+        }
+
+        .spinning {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            100% { transform: rotate(360deg); }
+        }
+
+        .chart-section {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 350px;
+            width: 100%;
+        }
+
+        .log-section {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .log-box {
+            background-color: #0f172a;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            height: 140px;
+            overflow-y: auto;
+            padding: 12px;
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .log-entry {
+            margin-bottom: 4px;
+        }
+
+        .btn {
+            background-color: #0f172a;
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        .btn:hover {
+            background-color: var(--border-color);
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="title-group">
+            <h1>Solar Tracker & Thermal System</h1>
+            <p>ESP32 Telemetry Monitor</p>
+        </div>
+        <div class="status-badge">
+            <div id="statusDot" class="status-dot"></div>
+            <span id="statusText">Connecting...</span>
+        </div>
+    </header>
+
+    <div class="grid-container">
+        <!-- Temperature Card -->
+        <div class="card">
+            <div class="card-header">
+                <span>ACTUAL TEMPERATURE</span>
+                <span>DHT11</span>
+            </div>
+            <div id="tempVal" class="card-value">-- °C</div>
+            <div class="progress-bar-bg">
+                <div id="tempBar" class="progress-bar-fill" style="width: 0%; background-color: var(--accent-blue);"></div>
+            </div>
+        </div>
+
+        <!-- Threshold Card -->
+        <div class="card">
+            <div class="card-header">
+                <span>TRIGGER THRESHOLD</span>
+                <span>Potentiometer</span>
+            </div>
+            <div id="threshVal" class="card-value">-- °C</div>
+            <div class="progress-bar-bg">
+                <div id="threshBar" class="progress-bar-fill" style="width: 0%; background-color: var(--accent-amber);"></div>
+            </div>
+        </div>
+
+        <!-- Fan Status Card -->
+        <div class="card">
+            <div class="card-header">
+                <span>COOLING FAN</span>
+                <span>Relay / Motor</span>
+            </div>
+            <div style="margin: 8px 0;">
+                <div id="fanBadge" class="fan-status-badge fan-off">
+                    <span id="fanIcon" class="fan-icon">⚙</span>
+                    <span id="fanText">OFF (Red LED)</span>
+                </div>
+            </div>
+            <p style="font-size: 0.75rem; color: var(--text-secondary);">Green LED on D16 = Active | Red LED on D15 = Idle</p>
+        </div>
+    </div>
+
+    <!-- Real-Time Chart -->
+    <div class="chart-section">
+        <div class="card-header" style="margin-bottom: 16px;">
+            <span style="font-weight: 600; color: var(--text-primary);">Real-Time Thermal Comparison</span>
+            <span>Live Data Updates</span>
+        </div>
+        <div class="chart-container">
+            <canvas id="telemetryChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Packet Log -->
+    <div class="log-section">
+        <div class="log-header">
+            <span style="font-size: 0.875rem; font-weight: 600; color: var(--text-primary);">Live MQTT Packet Log</span>
+            <button class="btn" onclick="clearLogs()">Clear Console</button>
+        </div>
+        <div id="logBox" class="log-box"></div>
+    </div>
+
+    <script>
+        // Log Helper
+        function log(msg) {
+            const box = document.getElementById('logBox');
+            const time = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = `[${time}] ${msg}`;
+            box.appendChild(entry);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function clearLogs() {
+            document.getElementById('logBox').innerHTML = '';
+        }
+
+        // State Tracking
+        let currentTemp = null;
+        let currentThresh = null;
+
+        // Chart Initialization
+        const ctx = document.getElementById('telemetryChart').getContext('2d');
+        const telemetryChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Temperature (°C)',
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        data: [],
+                        fill: true,
+                        tension: 0.3
+                    },
+                    {
+                        label: 'Threshold (°C)',
+                        borderColor: '#f59e0b',
+                        borderDash: [5, 5],
+                        data: [],
+                        fill: false,
+                        tension: 0.1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        grid: { color: '#334155' },
+                        ticks: { color: '#94a3b8' }
+                    },
+                    y: {
+                        grid: { color: '#334155' },
+                        ticks: { color: '#94a3b8' },
+                        suggestedMin: 15,
+                        suggestedMax: 45
+                    }
+                },
+                plugins: {
+                    legend: {
+                        labels: { color: '#f8fafc' }
+                    }
+                }
+            }
+        });
+
+        // MQTT Client Setup
+        const clientID = "web_dashboard_" + Math.random().toString(16).substring(2, 8);
+        const host = "broker.hivemq.com";
+        const port = 8884; // WebSocket Port
+        const topicPrefix = "esp32/solar_tracker/";
+
+        const client = new Paho.MQTT.Client(host, port, clientID);
+
+        client.onConnectionLost = onConnectionLost;
+        client.onMessageArrived = onMessageArrived;
+
+        log(`Connecting to ${host}:${port} via WebSockets...`);
+
+        client.connect({
+            onSuccess: onConnect,
+            onFailure: onFail,
+            useSSL: true,
+            timeout: 10
+        });
+
+        function onConnect() {
+            log("Successfully connected to HiveMQ Broker!");
+            document.getElementById('statusDot').style.backgroundColor = "var(--accent-green)";
+            document.getElementById('statusText').textContent = "Live Connected";
+            
+            client.subscribe(topicPrefix + "#");
+            log(`Subscribed to topic: ${topicPrefix}#`);
+        }
+
+        function onFail(err) {
+            log(`Connection failed: ${err.errorMessage}`);
+            document.getElementById('statusDot').style.backgroundColor = "var(--accent-red)";
+            document.getElementById('statusText').textContent = "Disconnected";
+        }
+
+        function onConnectionLost(responseObject) {
+            if (responseObject.errorCode !== 0) {
+                log(`Connection Lost: ${responseObject.errorMessage}`);
+                document.getElementById('statusDot').style.backgroundColor = "var(--accent-red)";
+                document.getElementById('statusText').textContent = "Connection Lost";
+            }
+        }
+
+        // Updated Safety Check in Message Handler
+        function onMessageArrived(message) {
+            // Safety guard against undefined or broken packets
+            if (!message || !message.destinationName) return;
+
+            const topic = message.destinationName;
+            const payload = message.payloadString;
+
+            log(`[${topic}] -> ${payload}`);
+
+            const val = parseFloat(payload);
+            const timeStr = new Date().toLocaleTimeString();
+
+            if (topic.endsWith('/temperature') || topic.endsWith('/temp')) {
+                if (!isNaN(val)) {
+                    currentTemp = val;
+                    document.getElementById('tempVal').textContent = `${val.toFixed(1)} °C`;
+                    const percent = Math.min(Math.max((val / 50) * 100, 0), 100);
+                    document.getElementById('tempBar').style.width = `${percent}%`;
+                    updateChart(timeStr);
+                }
+            } else if (topic.endsWith('/threshold')) {
+                if (!isNaN(val)) {
+                    currentThresh = val;
+                    document.getElementById('threshVal').textContent = `${val.toFixed(1)} °C`;
+                    const percent = Math.min(Math.max((val / 50) * 100, 0), 100);
+                    document.getElementById('threshBar').style.width = `${percent}%`;
+                    updateChart(timeStr);
+                }
+            } else if (topic.endsWith('/fan') || topic.endsWith('/fan_status')) {
+                const isFanOn = payload.toUpperCase().includes('ON') || payload === '1';
+                const fanBadge = document.getElementById('fanBadge');
+                const fanIcon = document.getElementById('fanIcon');
+                const fanText = document.getElementById('fanText');
+
+                if (isFanOn) {
+                    fanBadge.className = 'fan-status-badge fan-on';
+                    fanIcon.className = 'fan-icon spinning';
+                    fanText.textContent = 'ON (Green LED)';
+                } else {
+                    fanBadge.className = 'fan-status-badge fan-off';
+                    fanIcon.className = 'fan-icon';
+                    fanText.textContent = 'OFF (Red LED)';
+                }
+            }
+        }
+
+        function updateChart(timestamp) {
+            if (currentTemp !== null || currentThresh !== null) {
+                telemetryChart.data.labels.push(timestamp);
+                telemetryChart.data.datasets[0].data.push(currentTemp);
+                telemetryChart.data.datasets[1].data.push(currentThresh);
+
+                if (telemetryChart.data.labels.length > 20) {
+                    telemetryChart.data.labels.shift();
+                    telemetryChart.data.datasets[0].data.shift();
+                    telemetryChart.data.datasets[1].data.shift();
+                }
+                telemetryChart.update();
+            }
+        }
+    </script>
+</body>
+</html>
