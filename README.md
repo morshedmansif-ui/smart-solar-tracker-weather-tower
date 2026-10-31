@@ -29,7 +29,10 @@ This project addresses two core challenges in renewable energy and embedded syst
 ## 👥 Team Information & Individual Contributions
 | **M Mansif Morshed** | Firmware development (ESP32 non-blocking loops, MQTT client integration, watchdog stability), CAD mechanical modeling, and Web Dashboard (HTML/JS/Chart.js) architecture. |
 
+## 📺 Project Video Demonstration
+Click the link below to watch the full project walkthrough and hardware demo on YouTube:
 
+👉 **[Watch the Smart Solar Tracker Demo on YouTube]((https://www.youtube.com/watch?v=3auwEeMrJEg))**
 ---
 
 
