@@ -32,7 +32,6 @@ This project addresses two core challenges in renewable energy and embedded syst
 
 ---
 
-## 📺 YouTube Demo Link
-👉 **[Watch the Project Demonstration on YouTube](https://youtu.be/3auwEeMrJEg?si=6-sMh3qW6YZuZ12l)** 
+
 
 
